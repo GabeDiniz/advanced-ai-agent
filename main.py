@@ -5,6 +5,7 @@ from llama_index.core.embeddings import resolve_embed_model
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from llama_index.core.agent import ReActAgent
 from prompts import context
+from code_reader import code_reader
 from dotenv import load_dotenv
 
 load_dotenv()  # Load environment variables from .env file
@@ -16,7 +17,7 @@ llm = Ollama(
 )
 
 # This takes our document and parses it into a vector store index
-parser = LlamaParse(result_type="markdown")
+parser = LlamaParse(result_type="markdown") # can't parse python files
 
 file_extractor = {".pdf": parser}
 # Load data from the directory "./data" using the file extractor
@@ -34,7 +35,8 @@ tools = [
             name="api_documentation",
             description="This gives docomentation about code for an API. use this for reading docs for APIs",
         )
-    )
+    ),
+    code_reader
 ]
 
 code_llm = Ollama(model="codellama:latest", base_url="http://127.0.0.1:11434", request_timeout=120)
