@@ -4,8 +4,13 @@ from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, PromptTemp
 from llama_index.core.embeddings import resolve_embed_model
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from llama_index.core.agent import ReActAgent
-from prompts import context
+from pydantic import BaseModel
+from llama_index.core.output_parsers import PydanticOutputParser
+from llama_index.core.query_pipeline import QueryPipeline
+from prompts import context, code_parser_template
 from code_reader import code_reader
+import ast
+
 from dotenv import load_dotenv
 
 load_dotenv()  # Load environment variables from .env file
@@ -42,6 +47,34 @@ tools = [
 code_llm = Ollama(model="codellama:latest", base_url="http://127.0.0.1:11434", request_timeout=120)
 agent = ReActAgent.from_tools(tools, llm=code_llm, verbose=True, context=context)
 
+"""
+# Code block notes
+A second LLM pass whose only job is to take a messy LLM output (code + explanation) and convert it into a clean, typed object with three fields:
+
+description (text description),
+code (just the code string),
+filename (a safe filename, no special chars).
+
+The order of operations: prompt -> agent -> messy output with explanation/code -> parser (what this is) -> clean object with three fields
+"""
+# Handle output parsing (formatting the output)
+class CodeOutput(BaseModel):
+    code: str
+    description: str
+    filename: str
+
+parser = PydanticOutputParser(CodeOutput)
+json_prompt_str = parser.format(code_parser_template)
+json_prompt_template = PromptTemplate(json_prompt_str)
+output_pipeline = QueryPipeline(chain=[json_prompt_template, llm])
+""""""
+
 while (prompt := input("Enter a prompt: (q to quit): ")) != "q":
     result = agent.query(prompt)
-    print(result)
+    next_result = output_pipeline.run(response=result)
+    cleaned_json = ast.literal_eval(str(next_result).replace("assistant:", ""))
+
+    print(cleaned_json["code"])
+    print("\n\nDescription: ", cleaned_json["description"])
+
+    filename = cleaned_json["filename"]
